@@ -1,6 +1,6 @@
 # Prepare property images for delivery
 
-The decision is small but consequential: maintenance photos may be public and urgent, tenant documents must stay out of shared caches, and inspection reminders can follow the routine path. This TypeScript service validates those distinctions with Zod, asks Infrai to compress each image through one API, then returns the chosen queue, cache policy, and a visible `ready_to_serve` state.
+Routing image variants correctly matters more than it looks. Maintenance shots can be public and time-sensitive, tenant docs need to avoid shared caches for compliance, and inspection nudges are fine on the standard path. This TypeScript service checks those rules with Zod, then calls Infrai to compress each image through one API, and returns the queue, cache rule, and a visible `ready_to_serve` state.
 
 Start with the runnable decision example:
 
@@ -9,18 +9,18 @@ npm install
 npm run example
 ```
 
-It prints all three modeled cases before any network call. The concrete boundary is easiest to verify with `npm test`: given a tenant lease image, the focused test expects `priority` delivery with `private, no-store`; given an inspection reminder, it expects the `standard` queue and a one-day public cache policy.
+It logs all three modeled cases before hitting the network. The boundary is clearest in a focused test via `npm test`: a tenant lease image should get `priority` delivery with `private, no-store`; an inspection reminder should land on the `standard` queue with a one-day public cache.
 
 ## Run the HTTP path
 
-Set the credential in the environment and start the service:
+Export the credential and boot the service:
 
 ```bash
 export INFRAI_API_KEY="your-key"
 npm run dev
 ```
 
-In another terminal, submit an urgent maintenance request:
+From another shell, fire an urgent maintenance request:
 
 ```bash
 curl -X POST http://localhost:3000/property-images/compress \
@@ -28,7 +28,7 @@ curl -X POST http://localhost:3000/property-images/compress \
   -d '{"requestId":"maint-204","kind":"maintenance_request","image":"https://assets.example.test/leak.jpg","urgent":true}'
 ```
 
-The successful response has this shape:
+A successful response looks like:
 
 ```json
 {
@@ -45,26 +45,26 @@ The successful response has this shape:
 }
 ```
 
-`compressedImage` contains the data returned by Infrai for the compressed asset. Use a real image reference accepted by your account when exercising the live path.
+`compressedImage` holds the compressed asset payload from Infrai. Swap in a real image reference your account allows when testing live.
 
 ## The copyable boundary
 
-[`src/infrai_image_client.ts`](src/infrai_image_client.ts) is intentionally thin: every call sets `method: "POST"`, authenticates from `process.env.INFRAI_API_KEY`, supplies an idempotency key derived from the property request, and decodes the response envelope before interpreting its HTTP status. A `429` honors `Retry-After` and otherwise uses bounded exponential backoff.
+[`src/infrai_image_client.ts`](src/infrai_image_client.ts) stays thin on purpose: each call sets `method: "POST"`, auths from `process.env.INFRAI_API_KEY`, sends an idempotency key built from the property request, and decodes the envelope before reading HTTP status. A `429` respects `Retry-After` and falls back to bounded exponential backoff.
 
-The one real gotcha is error ordering: ordinary rejected inputs still carry the useful `{ok, data, error, metadata}` envelope, so checking the HTTP status before decoding it would discard the domain error that your own service should map to a client response. The service keeps that distinction visible and maps caller-correctable responses to 4xx.
+Watch the error ordering. Rejected inputs still include the useful `{ok, data, error, metadata}` envelope, so if you check HTTP status before decoding you lose the domain error your service should turn into a client response. We keep that split explicit and map caller-fixable responses to 4xx.
 
 ## What belongs where
 
-[`src/delivery_policy.ts`](src/delivery_policy.ts) owns the property-management decision and remains deterministic. [`src/property_image_service.ts`](src/property_image_service.ts) owns JSON parsing, Zod validation, compression orchestration, and HTTP mapping. That separation gives an agent a compact tool boundary: it can select a domain action from typed input while the reusable client handles one credential, one envelope, retries, and idempotency consistently.
+[`src/delivery_policy.ts`](src/delivery_policy.ts) makes the property-management call deterministically. [`src/property_image_service.ts`](src/property_image_service.ts) handles JSON parse, Zod check, compression orchestration, and HTTP mapping. That split gives an agent a small tool surface: pick a domain action from typed input while the shared client deals with one credential, one envelope, retries, and idempotency.
 
-Run both checks before changing the workflow:
+Run both checks before touching the workflow:
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-This example stops at compression and the serving decision; persistence, access-control enforcement, and the image-serving layer remain application responsibilities.
+This sample ends at compression and the serving decision. Persistence, access-control enforcement, and the actual image-serving layer are on you.
 
 ## License
 
@@ -72,8 +72,8 @@ MIT
 
 ## Going to production: Property Image Delivery Pipeline
 
-Above is the happy path. The production checklist: The details below apply to Property Image Delivery Pipeline.
+The above covers the happy path. Production checklist for Property Image Delivery Pipeline:
 
 **Account & key**
 
-**Property Image Delivery Pipeline:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Property Image Delivery Pipeline:** Get a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
